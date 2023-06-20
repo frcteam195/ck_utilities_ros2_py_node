@@ -5,12 +5,12 @@ import os
 
 package_name = 'ck_utilities_ros2_py_node'
 
-base_path_str = str(Path(str(Path(__file__).resolve().parent) + '/'))
-template_path = Path(base_path_str + '/' + package_name + '/generated')
-template_path.mkdir(exist_ok=True)
-os.close(os.open(str(template_path) + '/__init__.py', os.O_CREAT))
+# base_path_str = str(Path(str(Path(__file__).resolve().parent) + '/'))
+# template_path = Path(base_path_str + '/' + package_name + '/generated')
+# template_path.mkdir(exist_ok=True)
+# os.close(os.open(str(template_path) + '/__init__.py', os.O_CREAT))
 
-render_jinja(base_path_str + '/' + 'template/parameters.py.j2', base_path_str + '/' + package_name+ '/generated/parameters.py')
+# render_jinja(base_path_str + '/' + 'template/parameters.py.j2', base_path_str + '/' + package_name+ '/generated/parameters.py')
 
 setup(
     name=package_name,
@@ -31,7 +31,6 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ck_utilities_ros2_py_node = ck_utilities_ros2_py_node.ck_utilities_ros2_py_node:main',
         ],
     },
 )
