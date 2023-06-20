@@ -7,6 +7,9 @@
   <maintainer email="robert.a.hilton.jr@gmail.com">rhilton</maintainer>
   <license>TODO: License declaration</license>
 
+  <depend>std_msgs</depend>
+  <depend>ck_ros2_base_msgs_node</depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

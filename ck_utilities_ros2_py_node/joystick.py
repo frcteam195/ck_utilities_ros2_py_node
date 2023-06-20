@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from threading import Thread, Lock
 from enum import Enum
-from ck_ros2_base_msgs_node.msg import Joystick_Status
-from ck_ros2_base_msgs_node.msg import Joystick as RIO_Joystick
+from ck_ros2_base_msgs_node.msg import JoystickStatusArray
+from ck_ros2_base_msgs_node.msg import JoystickStatus
 
 from ck_utilities_ros2_py_node.ckmath import *
 from typing import Tuple
@@ -34,7 +34,7 @@ class Joystick:
             raise JoystickIDOutOfRangeException("Joystick ID " + str(id) + " out of range!")
 
     @classmethod
-    def update(cls, msg : Joystick_Status):
+    def update(cls, msg : JoystickStatusArray):
         with cls.mutex:
             for joystick in msg.joysticks:
                 cls.joystick_map[joystick.index] = joystick
@@ -64,7 +64,7 @@ class Joystick:
         if buttonID < MAX_NUM_BUTTONS():
             currVal = 0
             if self.__id in self.joystick_map:
-                js : RIO_Joystick = self.joystick_map[self.__id]
+                js : JoystickStatus = self.joystick_map[self.__id]
                 if len(js.buttons) > buttonID:
                     currVal = js.buttons[buttonID]
                     retVal = currVal == 1 and (currVal != self.__prevButtonVals.get(buttonID, 0))
