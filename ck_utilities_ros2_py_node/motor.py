@@ -4,331 +4,290 @@ import rclpy
 from dataclasses import dataclass
 from threading import Thread, RLock
 from ck_ros2_base_msgs_node.msg import Motor_Status
-from ck_ros2_base_msgs_node.msg import Motor_Info
 from ck_ros2_base_msgs_node.msg import Motor_Control
 from ck_ros2_base_msgs_node.msg import Motor_Configuration
-from ck_ros2_base_msgs_node.msg import Motor_Config
 import ck_ros2_base_msgs_node.msg
-from ck_ros2_base_msgs_node.msg import Current_Limit_Configuration
 from enum import Enum
 from ck_utilities_ros2_py_node.ckmath import within
 
+from ck_utilities_ros2_py_node.node_handle import NodeHandle
 
-#TODO: Convert to ROS2
-
-class NeutralMode(Enum):
-    Coast = 1
-    Brake = 2
-
-class ConfigMode(Enum):
-    Master = 0
-    FastMaster = 1
-    Follower = 2
-
-class InvertType(Enum):
-    Nope = 0
-    InvertMotorOutput = 1
-    FollowMaster = 2
-    OpposeMaster = 3
-
-class LimitSwitchSource(Enum):
-    FeedbackConnector = 0
-    RemoteTalon = 1
-    RemoteTalonSRX = 1
-    RemoteCANifier = 2
-    Deactivated = 3
-
-class LimitSwitchNormal(Enum):
-    NormallyOpen = 0
-    NormallyClosed = 1
-    Disabled = 2
-
-class MotorType(Enum):
-    TalonFX = 0
-    TalonSRX = 1
+from typing import List
 
 class ControlMode(Enum):
-    PERCENT_OUTPUT = 0
-    POSITION = 1
-    VELOCITY = 2
-    CURRENT = 3
-    FOLLOWER = 5
-    MOTION_PROFILE = 6
-    MOTION_MAGIC = 7
-    MOTION_PROFILE_ARC = 10
-    MUSIC_TONE = 13
-    DISABLED = 15
+    """
+    Enumeration of the various control modes.
+    """
+    DUTY_CYCLE = 0
+    TORQUE_CURRENT = 1
+    VOLTAGE = 2
+    POSITION = 3
+    VELOCITY = 4
+    MOTION_MAGIC = 5
+    NEUTRAL_OUT = 6
+    STATIC_BRAKE = 7
+    COAST_OUT = 8
+    FOLLOWER = 9
 
-@dataclass
-class Faults:
-    BitField : int = 0
-    ###########################
-    UnderVoltage : bool = False
-    ForwardLimitSwitch : bool = False
-    ReverseLimitSwitch : bool = False
-    ForwardSoftLimit : bool = False
-    ReverseSoftLimit : bool = False
-    HardwareFailure : bool = False
-    ResetDuringEn : bool = False
-    SensorOverflow : bool = False
-    SensorOutOfPhase : bool = False
-    HardwareESDReset : bool = False
-    RemoteLossOfSignal : bool = False
-    APIError : bool = False
-    SupplyOverV : bool = False
-    SupplyUnstable : bool = False
-    ############################
+class FeedForwardType(Enum):
+    """
+    Enumeration of the available feed forward types.
+    """
+    NONE = 0
+    DUTY_CYCLE = 1
+    TORQUE_CURRENT = 2
+    VOLTAGE = 3
 
-    def __post_init__(self, BitField : int = 0):
-        self.BitField = BitField
-        self.UnderVoltage =       BitField & 0x00000000000001
-        self.ForwardLimitSwitch = BitField & 0x00000000000010
-        self.ReverseLimitSwitch = BitField & 0x00000000000100
-        self.ForwardSoftLimit =   BitField & 0x00000000001000
-        self.ReverseSoftLimit =   BitField & 0x00000000010000
-        self.HardwareFailure =    BitField & 0x00000000100000
-        self.ResetDuringEn =      BitField & 0x00000001000000
-        self.SensorOverflow =     BitField & 0x00000010000000
-        self.SensorOutOfPhase =   BitField & 0x00000100000000
-        self.HardwareESDReset =   BitField & 0x00001000000000
-        self.RemoteLossOfSignal = BitField & 0x00010000000000
-        self.APIError =           BitField & 0x00100000000000
-        self.SupplyOverV =        BitField & 0x01000000000000
-        self.SupplyUnstable =     BitField & 0x10000000000000
-
-@dataclass
-class StickyFaults:
-    BitField : int = 0
-    ###########################
-    UnderVoltage : bool = False
-    ForwardLimitSwitch : bool = False
-    ReverseLimitSwitch : bool = False
-    ForwardSoftLimit : bool = False
-    ReverseSoftLimit : bool = False
-    ResetDuringEn : bool = False
-    SensorOverflow : bool = False
-    SensorOutOfPhase : bool = False
-    HardwareESDReset : bool = False
-    RemoteLossOfSignal : bool = False
-    APIError : bool = False
-    SupplyOverV : bool = False
-    SupplyUnstable : bool = False
-    ############################
-
-    def __post_init__(self, BitField : int = 0):
-        self.BitField = BitField
-        self.UnderVoltage =       BitField & 0x0000000000001
-        self.ForwardLimitSwitch = BitField & 0x0000000000010
-        self.ReverseLimitSwitch = BitField & 0x0000000000100
-        self.ForwardSoftLimit =   BitField & 0x0000000001000
-        self.ReverseSoftLimit =   BitField & 0x0000000010000
-        self.ResetDuringEn =      BitField & 0x0000000100000
-        self.SensorOverflow =     BitField & 0x0000001000000
-        self.SensorOutOfPhase =   BitField & 0x0000010000000
-        self.HardwareESDReset =   BitField & 0x0000100000000
-        self.RemoteLossOfSignal = BitField & 0x0001000000000
-        self.APIError =           BitField & 0x0010000000000
-        self.SupplyOverV =        BitField & 0x0100000000000
-        self.SupplyUnstable =     BitField & 0x1000000000000
+class MotorType(Enum):
+    """
+    Enumeration of CTRE motor types.
+    """
+    TALON_FX = 0
+    TALON_SRX = 1
 
 @dataclass
 class OutputControl:
-    type : MotorType = MotorType.TalonFX
-    output : float = 0
-    arbFF : float = 0
-    controlMode : ControlMode = ControlMode.PERCENT_OUTPUT
+    """
+    Data class matching the motor control message.
+    """
+    motor_id : int = 0
+    control_mode : ControlMode = ControlMode.DUTY_CYCLE
+    setpoint : float = 0.0
+    feed_forward : float = 0.0
+    feed_forward_type : FeedForwardType = FeedForwardType.NONE
+    active_slot : int = 0
+
 @dataclass
-class MotorConfig:
-    type : MotorType = MotorType.TalonFX
-    fast_master : bool = False
-    kP : float = 0
-    kI : float = 0
-    kD : float = 0
-    kF : float = 0
-    kP_1 : float = 0
-    kI_1 : float = 0
-    kD_1 : float = 0
-    kF_1 : float = 0
-    active_gain_slot : int = 0
-    iZone : float = 0
-    maxIAccum : float = 0
-    allowedClosedLoopError : float = 0
-    maxClosedLoopPeakOutput : float = 0
-    motionCruiseVelocity : float = 0
-    motionCruiseAcceleration : float = 0
-    motionSCurveStrength : float = 0
-    forwardSoftLimit : float = 0
-    forwardSoftLimitEnable : bool = False
-    reverseSoftLimit : float = 0
-    reverseSoftLimitEnable : bool = False
-    feedbackSensorCoefficient : float = 0
-    voltageCompensationSaturation : float = 12
-    voltageCompensationEnabled : bool = True
-    inverted : bool = False
-    sensorPhaseInverted : bool = False
-    neutralMode : NeutralMode = NeutralMode.Coast
-    openLoopRamp : float = 0
-    closedLoopRamp : float = 0
-    supplyCurrentLimitEnable : bool = True
-    supplyCurrentLimit : float = 40
-    supplyCurrentLimitThresholdCurrent : float = 0
-    supplyCurrentLimitThresholdTime : float = 0
-    statorCurrentLimitEnable : bool = False
-    statorCurrentLimit : float = 0
-    statorCurrentLimitThresholdCurrent : float = 0
-    statorCurrentLimitThresholdTime : float =  0
-    followingEnabled : bool = False
-    followerId : int = 0
-    forwardLimitSwitchSource : LimitSwitchSource = LimitSwitchSource.Deactivated
-    reverseLimitSwitchSource : LimitSwitchSource = LimitSwitchSource.Deactivated
-    forwardLimitSwitchNormal : LimitSwitchNormal = LimitSwitchNormal.Disabled
-    reverseLimitSwitchNormal : LimitSwitchNormal = LimitSwitchNormal.Disabled
-    peakOutputForward : float = 0
-    peakOutputReverse : float = 0
+class MotorConfiguration:
+    """
+    Data class matching the motor configuration message.
+    """
+    motor_id : int = 0
+    master_id : int = 0
+    invert : bool = False
+    brake_neutral : bool = False
+
+    duty_cycle_neutral_deadband : float = 0.0
+    peak_forward_duty_cycle : float = 0.0
+    peak_reverse_duty_cycle : float = 0.0
+
+    kP : List[float] = [0 for i in range(3)]
+    kI : List[float] = [0 for i in range(3)]
+    kD : List[float] = [0 for i in range(3)]
+    kV : List[float] = [0 for i in range(3)]
+    kS : List[float] =  [0 for i in range(3)]
+
+    enable_stator_current_limit : bool = False
+    stator_current_limit : float = 0.0
+
+    enable_supply_current_limit : bool = False
+    supply_current_limit : float = 0.0
+    supply_current_threshold : float = 0.0
+    supply_time_threshold : float = 0.0
+
+    supply_voltage_time_constant : float = 0.0
+    peak_forward_voltage : float = 0.0
+    peak_reverse_voltage : float = 0.0
+
+    torque_neutral_deadband : float = 0.0
+    peak_forward_torque_current : float = 0.0
+    peak_reverse_torque_current : float = 0.0
+
+    duty_cycle_closed_loop_ramp_period : float = 0.0
+    torque_current_closed_loop_ramp_period : float = 0.0
+    voltage_closed_loop_ramp_period : float = 0.0
+
+    duty_cycle_open_loop_ramp_period : float = 0.0
+    torque_current_open_loop_ramp_period : float = 0.0
+    voltage_open_loop_ramp_period : float = 0.0
+
+    enable_forward_soft_limit : bool = False
+    forward_soft_limit_threshold : float = 0.0
+
+    enable_reverse_soft_limit : bool = False
+    reverse_soft_limit_threshold : float = 0.0
+
+    motion_magic_acceleration : float = 0.0
+    motion_magic_cruise_velocity : float = 0.0
+    motion_magic_jerk : float = 0.0
+
 
 class MotorManager:
+    """
+    Class that manages all of the robot's motors.
+    """
     def __init__(self):
-        self.__motorConfigs = {}
-        self.__motorControls = {}
-        self.__motorStatuses = {}
-        self.__controlPublisher = rospy.Publisher(name='/MotorControl', data_class=Motor_Control, queue_size=50, tcp_nodelay=True)
-        self.__configPublisher = rospy.Publisher(name='/MotorConfiguration', data_class=Motor_Configuration, queue_size=50, tcp_nodelay=True)
+        self.motor_configurations = {}
+        self.motor_controls = {}
+        self.motor_statuses = {}
+
+        self.control_publisher = NodeHandle.node_handle.create_publisher("/MotorControl", Motor_Control, qos_profile=10)
+        self.configuration_publisher = NodeHandle.node_handle.create_publisher("/MotorConfiguration", Motor_Configuration, qos_profile=10)
+
         self.__mutex = RLock()
-        x = Thread(target=self.__motorMasterLoop)
-        rospy.Subscriber("/MotorStatus", Motor_Status, self.__receive_motor_status)
+        x = Thread(target=self.loop)
+
+        qos_profile = rclpy.qos.QoSProfile(
+            reliability = rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT,
+            history = rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
+            depth = 1,
+            durability = rclpy.qos.QoSDurabilityPolicy.VOLATILE
+        )
+
+        NodeHandle.node_handle.create_subscription("/MotorStatus", Motor_Status, callback=self.receive_motor_status, qos_profile=qos_profile)
+
         x.start()
 
-    def __receive_motor_status(self, data):
+
+    def receive_motor_status(self, data):
+        """
+        Receives the status of all the robot motors.
+        """
         with self.__mutex:
             for motor in data.motors:
-                self.__motorStatuses[motor.id] = motor
+                self.motor_statuses[motor.id] = motor
 
-    def apply_motor_config(self, motorId : int, motorConfig : MotorConfig):
+    def apply_motor_config(self, motor_id : int, motor_configuration : MotorConfiguration):
+        """
+        Applies a configuration to the local motor.
+        """
         with self.__mutex:
-            self.__motorConfigs[motorId] = motorConfig
+            self.motor_configurations[motor_id] = motor_configuration
 
-    def update_motor_control(self, motorId : int, outputControl : OutputControl):
+    def update_motor_control(self, motor_id : int, output_control : OutputControl):
+        """
+        Updates the motor control for the local motor.
+        """
         with self.__mutex:
             old_output_control = None
-            if motorId in self.__motorControls:
-                old_output_control = self.__motorControls[motorId]
-            self.__motorControls[motorId] = outputControl
-            if old_output_control != self.__motorControls[motorId]:
-                self.__set_motor_now(motorId, outputControl)
+            if motor_id in self.motor_controls:
+                old_output_control = self.motor_controls[motor_id]
+            self.motor_controls[motor_id] = output_control
+            if old_output_control != self.motor_controls[motor_id]:
+                self.__set_motor_now(motor_id, output_control)
 
-    def get_status(self, id):
+    def get_status(self, motor_id : int):
+        """
+        Gets the status for the specified motor.
+        """
         with self.__mutex:
-            if id in self.__motorStatuses:
-                return self.__motorStatuses[id]
+            if id in self.motor_statuses:
+                return self.motor_statuses[motor_id]
             return None
 
-    def get_control(self, id):
+    def get_control(self, motor_id : int):
+        """
+        Gets the current control for the specified motor.
+        """
         with self.__mutex:
-            if id in self.__motorControls:
-                return self.__motorControls[id]
+            if motor_id in self.motor_controls:
+                return self.motor_controls[motor_id]
             return None
 
     @staticmethod
-    def __create_motor_control_dictionary(motorId : int, motorControl : OutputControl):
-        motorControlMsg = ck_ros_base_msgs_node.msg.Motor()
-        motorControlMsg.id = motorId
-        motorControlMsg.controller_type = motorControl.type.value
-        motorControlMsg.control_mode = motorControl.controlMode.value
-        motorControlMsg.output_value = motorControl.output
-        motorControlMsg.arbitrary_feedforward = motorControl.arbFF
-        return motorControlMsg
+    def create_motor_control_message(motor_id : int, motor_control : OutputControl):
+        """
+        Create a motor control message.
+        """
+        control_message = ck_ros_base_msgs_node.msg.Motor()
+
+        control_message.id = motor_id
+        control_message.control_mode = motor_control.control_mode.value
+        control_message.setpoint = motor_control.setpoint
+        control_message.feed_forward = motor_control.feed_forward
+        control_message.feed_forward_type = motor_control.feed_forward_type.value
+        control_message.active_slot = motor_control.active_slot
+
+        return control_message
 
     @staticmethod
-    def __create_motor_config_dictionary(motorId : int, motorConfig : MotorConfig):
-        motorConfigMsg = Motor_Config()
-        motorConfigMsg.id = motorId
-        motorConfigMsg.controller_type = motorConfig.type.value
-        if motorConfig.followingEnabled:
-            motorConfigMsg.controller_mode = ConfigMode.Follower.value
-            motorConfigMsg.invert_type = InvertType.OpposeMaster.value if motorConfig.inverted else InvertType.FollowMaster.value
-        elif motorConfig.fast_master:
-            motorConfigMsg.controller_mode = ConfigMode.FastMaster.value
-            motorConfigMsg.invert_type = InvertType.InvertMotorOutput.value if motorConfig.inverted else InvertType.Nope.value
-        else:
-            motorConfigMsg.controller_mode = ConfigMode.Master.value
-            motorConfigMsg.invert_type = InvertType.InvertMotorOutput.value if motorConfig.inverted else InvertType.Nope.value
-        motorConfigMsg.kP = motorConfig.kP
-        motorConfigMsg.kI = motorConfig.kI
-        motorConfigMsg.kD = motorConfig.kD
-        motorConfigMsg.kF = motorConfig.kF
-        motorConfigMsg.kP_1 = motorConfig.kP_1
-        motorConfigMsg.kI_1 = motorConfig.kI_1
-        motorConfigMsg.kD_1 = motorConfig.kD_1
-        motorConfigMsg.kF_1 = motorConfig.kF_1
-        motorConfigMsg.active_gain_slot = motorConfig.active_gain_slot
-        motorConfigMsg.iZone = motorConfig.iZone
-        motorConfigMsg.max_i_accum = motorConfig.maxIAccum
-        motorConfigMsg.allowed_closed_loop_error = motorConfig.allowedClosedLoopError
-        motorConfigMsg.max_closed_loop_peak_output = motorConfig.maxClosedLoopPeakOutput
-        motorConfigMsg.motion_cruise_velocity = motorConfig.motionCruiseVelocity
-        motorConfigMsg.motion_acceleration = motorConfig.motionCruiseAcceleration
-        motorConfigMsg.motion_s_curve_strength = motorConfig.motionSCurveStrength
-        motorConfigMsg.forward_soft_limit = motorConfig.forwardSoftLimit
-        motorConfigMsg.forward_soft_limit_enable = motorConfig.forwardSoftLimitEnable
-        motorConfigMsg.reverse_soft_limit = motorConfig.reverseSoftLimit
-        motorConfigMsg.reverse_soft_limit_enable = motorConfig.reverseSoftLimitEnable
-        motorConfigMsg.feedback_sensor_coefficient = motorConfig.feedbackSensorCoefficient
-        motorConfigMsg.voltage_compensation_saturation = motorConfig.voltageCompensationSaturation
-        motorConfigMsg.voltage_compensation_enabled = motorConfig.voltageCompensationEnabled
-        motorConfigMsg.sensor_phase_inverted = motorConfig.sensorPhaseInverted
-        motorConfigMsg.neutral_mode = motorConfig.neutralMode.value
-        motorConfigMsg.open_loop_ramp = motorConfig.openLoopRamp
-        motorConfigMsg.closed_loop_ramp = motorConfig.closedLoopRamp
-        supplyCurrentLimit = Current_Limit_Configuration()
-        supplyCurrentLimit.enable = motorConfig.supplyCurrentLimitEnable
-        supplyCurrentLimit.current_limit = motorConfig.supplyCurrentLimit
-        supplyCurrentLimit.trigger_threshold_current = motorConfig.supplyCurrentLimitThresholdCurrent
-        supplyCurrentLimit.trigger_threshold_time = motorConfig.supplyCurrentLimitThresholdTime
-        motorConfigMsg.supply_current_limit_config = supplyCurrentLimit
-        statorCurrentLimit = Current_Limit_Configuration()
-        statorCurrentLimit.enable = motorConfig.statorCurrentLimitEnable
-        statorCurrentLimit.current_limit = motorConfig.statorCurrentLimit
-        statorCurrentLimit.trigger_threshold_current = motorConfig.statorCurrentLimitThresholdCurrent
-        statorCurrentLimit.trigger_threshold_time = motorConfig.statorCurrentLimitThresholdTime
-        motorConfigMsg.stator_current_limit_config = statorCurrentLimit
-        motorConfigMsg.forward_limit_switch_source = motorConfig.forwardLimitSwitchSource.value
-        motorConfigMsg.forward_limit_switch_normal = motorConfig.forwardLimitSwitchNormal.value
-        motorConfigMsg.reverse_limit_switch_source = motorConfig.reverseLimitSwitchSource.value
-        motorConfigMsg.reverse_limit_switch_normal = motorConfig.reverseLimitSwitchNormal.value
-        motorConfigMsg.peak_output_forward = motorConfig.peakOutputForward
-        motorConfigMsg.peak_output_reverse = motorConfig.peakOutputReverse
-        return motorConfigMsg
+    def create_motor_config_message(motor_id : int, motor_configuration : MotorConfiguration):
+        configuration_message = Motor_Configuration()
 
-    def __transmit_motor_configs(self):
-        configMessage = Motor_Configuration()
-        configMessage.motors = []
-        for motorId in self.__motorConfigs.keys():
-            if motorId in self.__motorControls:
-                configMessage.motors.append(self.__create_motor_config_dictionary(motorId, self.__motorConfigs[motorId]))
-        self.__configPublisher.publish(configMessage)
+        configuration_message.id = motor_id
+        configuration_message.master_id = motor_configuration.master_id
 
-    def __transmit_motor_controls(self):
-        controlMessage = Motor_Control()
-        controlMessage.motors = []
-        for motorId in self.__motorControls.keys():
-            if motorId in self.__motorConfigs:
-                if self.__motorConfigs[motorId]:
-                    controlStructure = self.__motorControls[motorId]
-                controlMessage.motors.append(self.__create_motor_control_dictionary(motorId, controlStructure))
-        self.__controlPublisher.publish(controlMessage)
+        configuration_message.invert = motor_id
+        configuration_message.brake_neutral = motor_configuration.brake_neutral
 
-    def __set_motor_now(self, motorId : int, outputControl : OutputControl):
-        controlMessage = Motor_Control()
-        controlMessage.motors = []
-        controlMessage.motors.append(self.__create_motor_control_dictionary(motorId, self.__motorControls[motorId]))
-        self.__controlPublisher.publish(controlMessage)
+        for i in range(3):
+            configuration_message.kP[i] = motor_configuration.kP[i]
+            configuration_message.kI[i] = motor_configuration.kI[i]
+            configuration_message.kD[i] = motor_configuration.kD[i]
+            configuration_message.kV[i] = motor_configuration.kV[i]
+            configuration_message.kS[i] = motor_configuration.kS[i]
 
-    def __motorMasterLoop(self):
-        r = rospy.Rate(10) #10hz
-        while not rospy.is_shutdown():
+        configuration_message.enable_stator_current_limit = motor_configuration.enable_stator_current_limit
+        configuration_message.stator_current_limit = motor_configuration.stator_current_limit
+
+        configuration_message.enable_supply_current_limit = motor_configuration.enable_supply_current_limit
+        configuration_message.supply_current_limit = motor_configuration.supply_current_limit
+        configuration_message.supply_current_threshold = motor_configuration.supply_current_threshold
+        configuration_message.supply_time_threshold = motor_configuration.supply_time_threshold
+
+        configuration_message.duty_cycle_closed_loop_ramp_period = motor_configuration.duty_cycle_closed_loop_ramp_period
+        configuration_message.torque_current_closed_loop_ramp_period = motor_configuration.torque_current_closed_loop_ramp_period
+        configuration_message.voltage_closed_loop_ramp_period = motor_configuration.voltage_closed_loop_ramp_period
+
+        configuration_message.duty_cycle_open_loop_ramp_period = motor_configuration.duty_cycle_open_loop_ramp_period
+        configuration_message.torque_current_open_loop_ramp_period = motor_configuration.torque_current_open_loop_ramp_period
+        configuration_message.voltage_open_loop_ramp_period = motor_configuration.voltage_open_loop_ramp_period
+
+        configuration_message.enable_forward_soft_limit = motor_configuration.enable_forward_soft_limit
+        configuration_message.forward_soft_limit_threshold = motor_configuration.forward_soft_limit_threshold
+
+        configuration_message.enable_reverse_soft_limit = motor_configuration.enable_reverse_soft_limit
+        configuration_message.reverse_soft_limit_threshold = motor_configuration.reverse_soft_limit_threshold
+
+        configuration_message.motion_magic_acceleration = motor_configuration.motion_magic_acceleration
+        configuration_message.motion_magic_cruise_velocity = motor_configuration.motion_magic_cruise_velocity
+        configuration_message.motion_magic_jerk = motor_configuration.motion_magic_jerk
+
+        return configuration_message
+
+    def transmit_motor_configurations(self):
+        """
+        Publishes the motor configurations.
+        """
+        configuration_message = Motor_Configuration()
+        configuration_message.motors = []
+
+        for motor_id, motor_configuration in self.motor_configurations.items():
+            if motor_id in self.motor_controls:
+                configuration_message.motors.append(self.create_motor_config_message(motor_id, motor_configuration))
+        self.configuration_publisher.publish(configuration_message)
+
+    def transmit_motor_controls(self):
+        """
+        Publishs the motor controls.
+        """
+        control_message = Motor_Control()
+        control_message.motors = []
+
+        for motor_id, motor_control in self.motor_controls.items():
+            if motor_id in self.motor_configurations:
+                if self.motor_configurations[motor_id]:
+                    control_message.motors.append(self.create_motor_control_message(motor_id, motor_control))
+        self.control_publisher.publish(control_message)
+
+    def set_motor_now(self, motor_id : int):
+        """
+        Appends the motor's control message and immediately publishes it.
+        """
+        control_message = Motor_Control()
+        control_message.motors = []
+        control_message.motors.append(self.create_motor_control_message(motor_id, self.motor_controls[motor_id]))
+        self.control_publisher.publish(control_message)
+
+    def loop(self):
+        """
+        Overall loop for motor configuration and control publishing.
+        """
+        r = rclpy.Rate(10) #10Hz
+        while not rclpy.is_shutdown():
             with self.__mutex:
-                self.__transmit_motor_controls()
-                self.__transmit_motor_configs()
+                self.transmit_motor_controls()
+                self.transmit_motor_configurations()
             r.sleep()
 
 class Motor:
