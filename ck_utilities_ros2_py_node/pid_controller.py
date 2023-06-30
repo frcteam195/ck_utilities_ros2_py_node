@@ -1,4 +1,5 @@
 import rclpy
+from ck_utilities_ros2_py_node.node_handle import NodeHandle
 
 #TODO: Convert to ROS2
 
@@ -40,7 +41,7 @@ class PIDController:
         self.__error_d = self.__error_d + (1 - self.__filter_r) * (self.__error - self.__error_last)
         self.__error_last = self.__error
 
-        time = rospy.get_time()
+        time = NodeHandle.node_handle.get_clock().now()
         dt = time - self.__last_time
         self.__last_time = time
         self.__prev_setpoint = self.__setpoint
@@ -55,7 +56,7 @@ class PIDController:
         self.__error_d = (1 - self.__filter_r) * (self.__error - self.__error_last)
         self.__error_last = self.__error
 
-        time = rospy.get_time()
+        time = NodeHandle.node_handle.get_clock().now()
         dt = time - self.__last_time
         self.__last_time = time
 

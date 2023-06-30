@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from queue import Queue
 from enum import Enum
+from ck_utilities_ros2_py_node.node_handle import NodeHandle
 from ck_ros2_base_msgs_node.msg import StateMachineLog
-import rclpy
 
 #TODO: Convert to ROS2
 
@@ -29,8 +29,8 @@ class StateMachine(ABC):
         def end(self):
             pass
 
-        def get_name(self):
-            return self.__name
+        # def get_name(self):
+        #     return self.__name
 
     def __init__(self, states, state):
         self.state = state
@@ -42,10 +42,11 @@ class StateMachine(ABC):
         self.log_count = 0
         self.transition_history.put(str(self.log_count) + ": Init: " + str(self.state))
         self.log_count += 1
-        self.log_publisher = rospy.Publisher(name="/state_machines/" + str(self.__class__.__name__),
-                                             data_class=StateMachineLog,
-                                             queue_size=100,
-                                             tcp_nodelay=False)
+
+        self.log_publisher = NodeHandle.node_handle.create_publisher(
+                                    topic="/state_machines/" + str(self.__class__.__name__),
+                                    msg_type=StateMachineLog,
+                                    qos_profile=100)
 
     def get_current_state(self) -> str:
         return self.state

@@ -1,6 +1,9 @@
 import rclpy
+from rclpy.time import Time
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 from threading import Lock
 from ck_utilities_ros2_py_node.geometry import *
+from ck_utilities_ros2_py_node.node_handle import NodeHandle
 from visualization_msgs.msg import *
 import tf
 
@@ -33,8 +36,9 @@ class ShapeManager:
             return cls.__manager
 
     def __init__(self):
-        self.__class__.__static_shape_publisher = rospy.Publisher(
-            name = "/static_shapes", data_class=MarkerArray, queue_size=1, tcp_nodelay=True, latch=True)
+        self.__qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.__class__.__static_shape_publisher = NodeHandle.node_handle.create_publisher(
+            topic = "/static_shapes", msg_type=MarkerArray, qos_profile=self.__qos)
         self.__class__.__static_shape_map = {}
 
     def publish_static_shape(self, marker : Marker):
@@ -54,7 +58,7 @@ class ShapeBase:
     def __init__(self, base_frame : str, type : int):
         self.__transform = Transform()
         self.__base_frame = base_frame
-        self.__namespace = rospy.get_name()
+        self.__namespace = NodeHandle.node_handle.get_name()
         ShapeBase.__cls_id += 1
         self.__id = ShapeBase.__cls_id
         self.__type = type
@@ -81,7 +85,7 @@ class ShapeBase:
 
     def convert_to_marker(self):
         marker = Marker()
-        marker.header.stamp = rospy.Time.from_sec(0)
+        marker.header.stamp = Time(seconds=0)
         marker.header.frame_id = self.__base_frame
         marker.action = Marker.ADD
         marker.ns = self.__namespace

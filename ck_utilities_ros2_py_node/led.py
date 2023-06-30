@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-from typing import List
+from typing import List, Dict
 import rclpy
+from ck_utilities_ros2_py_node.node_handle import NodeHandle
 from dataclasses import dataclass, field
 from threading import Thread, Lock
 from ck_ros2_base_msgs_node.msg import LED_Control, LED_Control_Data, LED_Color, LED_Animation, RGBW_Color
@@ -86,8 +87,12 @@ class LEDControl:
 
 class LEDManager:
     def __init__(self):
-        self.__ledControls : dict[int, LEDControl] = {}
-        self.__controlPublisher = rospy.Publisher(name='RioLedControl', data_class=LED_Control, queue_size=50, tcp_nodelay=True)
+        self.__ledControls : Dict[int, LEDControl] = {}
+        # self.__controlPublisher = rospy.Publisher(name='RioLedControl', data_class=LED_Control, queue_size=50, tcp_nodelay=True)
+        self.__controlPublisher = NodeHandle.node_handle.create_publisher(
+                                    topic='RioLedControl',
+                                    msg_type=LED_Control,
+                                    qos_profile=50)
         self.__mutex = Lock()
         x = Thread(target=self.__ledMasterLoop)
         x.start()
@@ -146,8 +151,8 @@ class LEDManager:
             self.__set_led_now(ledId, outputControl)
 
     def __ledMasterLoop(self):
-        r = rospy.Rate(10) #10hz
-        while not rospy.is_shutdown():
+        r = NodeHandle.node_handle.create_rate(10)
+        while rclpy.ok():
             with self.__mutex:
                 self.__transmit_led_controls()
             r.sleep()
