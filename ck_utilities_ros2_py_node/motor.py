@@ -67,9 +67,9 @@ class MotorConfiguration:
     invert : bool = False
     brake_neutral : bool = False
 
-    duty_cycle_neutral_deadband : float = 0.0
-    peak_forward_duty_cycle : float = 0.0
-    peak_reverse_duty_cycle : float = 0.0
+    # duty_cycle_neutral_deadband : float = 0.0
+    # peak_forward_duty_cycle : float = 0.0
+    # peak_reverse_duty_cycle : float = 0.0
 
     k_p : List[float] = [0 for i in range(3)]
     k_i : List[float] = [0 for i in range(3)]
@@ -85,13 +85,13 @@ class MotorConfiguration:
     supply_current_threshold : float = 0.0
     supply_time_threshold : float = 0.0
 
-    supply_voltage_time_constant : float = 0.0
-    peak_forward_voltage : float = 0.0
-    peak_reverse_voltage : float = 0.0
+    # supply_voltage_time_constant : float = 0.0
+    # peak_forward_voltage : float = 0.0
+    # peak_reverse_voltage : float = 0.0
 
-    torque_neutral_deadband : float = 0.0
-    peak_forward_torque_current : float = 0.0
-    peak_reverse_torque_current : float = 0.0
+    # torque_neutral_deadband : float = 0.0
+    # peak_forward_torque_current : float = 0.0
+    # peak_reverse_torque_current : float = 0.0
 
     duty_cycle_closed_loop_ramp_period : float = 0.0
     torque_current_closed_loop_ramp_period : float = 0.0
@@ -121,8 +121,8 @@ class MotorManager:
         self.__motor_controls = {}
         self.__motor_statuses = {}
 
-        self.__control_publisher = NodeHandle.node_handle.create_publisher("/MotorControl", MotorControl, qos_profile=10)
-        self.__configuration_publisher = NodeHandle.node_handle.create_publisher("/MotorConfiguration", MotorConfigurationMsg, qos_profile=10)
+        self.__control_publisher = NodeHandle.node_handle.create_publisher("/MotorControl", MotorControlArray, qos_profile=10)
+        self.__configuration_publisher = NodeHandle.node_handle.create_publisher("/MotorConfiguration", MotorConfigurationArray, qos_profile=10)
 
         self.__mutex = RLock()
         x = Thread(target=self.__loop)
@@ -134,12 +134,12 @@ class MotorManager:
             durability = rclpy.qos.QoSDurabilityPolicy.VOLATILE
         )
 
-        NodeHandle.node_handle.create_subscription("/MotorStatus", MotorControl, callback=self.__receive_motor_status, qos_profile=qos_profile)
+        NodeHandle.node_handle.create_subscription("/MotorStatus", MotorStatusArray, callback=self.__receive_motor_status, qos_profile=qos_profile)
 
         x.start()
 
 
-    def __receive_motor_status(self, data):
+    def __receive_motor_status(self, data : MotorStatusArray):
         """
         Receives the status of all the robot motors.
         """
@@ -196,7 +196,7 @@ class MotorManager:
         control_message.setpoint = motor_control.setpoint
         control_message.feed_forward = motor_control.feed_forward
         control_message.feed_forward_type = motor_control.feed_forward_type.value
-        control_message.gain_slot = motor_control.active_slot
+        control_message.gain_slot = motor_control.gain_slot
 
         return control_message
 
@@ -335,6 +335,12 @@ class Motor:
             __class__.manager.apply_motor_config(self.id, self.configuration)
             # TODO: Need to properly define a master/follower motor.
 
+    def follow(self, motor_id : int):
+        """
+        Assigns a master motor for this motor to follow via ID.
+        """
+        self.configuration.master_id = motor_id
+
     def set_kP(self, slot : int, value : float):
         """
         Sets the kP value in the specified slot.
@@ -395,7 +401,7 @@ class Motor:
         self.configuration.enable_forward_soft_limit = True
         self.configuration.forward_soft_limit_threshold = value
 
-    def enable_forward_soft_limit(self, enabled : bool):
+    def set_forward_soft_limit_enable(self, enabled : bool):
         """
         Enables the existing forward soft limit.
         """
@@ -408,31 +414,19 @@ class Motor:
         self.configuration.enable_reverse_soft_limit = True
         self.configuration.reverse_soft_limit_threshold = value
 
-    def enable_reverse_soft_limit(self, enabled : bool):
+    def set_reverse_soft_limit_enable(self, enabled : bool):
         """
         Enables the existing reverse soft limit.
         """
         self.configuration.enable_reverse_soft_limit = enabled
 
-    def assign_master_motor(self, motor_id : int):
-        """
-        Assigns a master motor for this motor to follow via ID.
-        """
-        self.configuration.master_id = motor_id
-
-    def set_brake_mode(self):
+    def set_neutral_mode(self, neutral_mode : NeutralMode):
         """
         Sets the motor neutral mode to brake.
         """
-        self.configuration.brake_neutral = True
+        self.configuration.brake_neutral = (neutral_mode == NeutralMode.Brake)
 
-    def set_coast_mode(self):
-        """
-        Sets the motor neutral mode to coast.
-        """
-        self.configuration.brake_neutral = False
-
-    def invert_motor(self, invert : bool):
+    def set_inverted(self, invert : bool):
         """
         Inverts the motor if input is true.
         """
@@ -454,59 +448,59 @@ class Motor:
         self.configuration.enable_stator_current_limit = enabled
         self.configuration.stator_current_limit = current_limit
 
-    def set_peak_forward_duty_cycle(self, peak_forward_duty_cycle : float):
-        """
-        Sets the peak forward duty cycle.
-        """
-        self.configuration.peak_forward_duty_cycle = peak_forward_duty_cycle
+    # def set_peak_forward_duty_cycle(self, peak_forward_duty_cycle : float):
+    #     """
+    #     Sets the peak forward duty cycle.
+    #     """
+    #     self.configuration.peak_forward_duty_cycle = peak_forward_duty_cycle
 
-    def set_peak_reverse_duty_cycle(self, peak_reverse_duty_cycle : float):
-        """
-        Sets the peak reverse duty cycle.
-        """
-        self.configuration.peak_reverse_duty_cycle = peak_reverse_duty_cycle
+    # def set_peak_reverse_duty_cycle(self, peak_reverse_duty_cycle : float):
+    #     """
+    #     Sets the peak reverse duty cycle.
+    #     """
+    #     self.configuration.peak_reverse_duty_cycle = peak_reverse_duty_cycle
 
-    def set_duty_cycle_neutral_deadband(self, duty_cycle_neutral_deadband : float):
-        """
-        Sets the duty cycle neutral deadband.
-        """
-        self.configuration.duty_cycle_neutral_deadband = duty_cycle_neutral_deadband
+    # def set_duty_cycle_neutral_deadband(self, duty_cycle_neutral_deadband : float):
+    #     """
+    #     Sets the duty cycle neutral deadband.
+    #     """
+    #     self.configuration.duty_cycle_neutral_deadband = duty_cycle_neutral_deadband
 
-    def set_supply_voltage_time_constant(self, supply_voltage_time_constant : float):
-        """
-        Sets the supply voltage time constant.
-        """
-        self.configuration.supply_voltage_time_constant = supply_voltage_time_constant
+    # def set_supply_voltage_time_constant(self, supply_voltage_time_constant : float):
+    #     """
+    #     Sets the supply voltage time constant.
+    #     """
+    #     self.configuration.supply_voltage_time_constant = supply_voltage_time_constant
 
-    def set_peak_forward_voltage(self, peak_forward_voltage : float):
-        """
-        Sets the peak forward voltage.
-        """
-        self.configuration.peak_forward_voltage = peak_forward_voltage
+    # def set_peak_forward_voltage(self, peak_forward_voltage : float):
+    #     """
+    #     Sets the peak forward voltage.
+    #     """
+    #     self.configuration.peak_forward_voltage = peak_forward_voltage
 
-    def set_peak_reverse_voltage(self, peak_reverse_voltage : float):
-        """
-        Sets the peak reverse voltage.
-        """
-        self.configuration.peak_reverse_voltage = peak_reverse_voltage
+    # def set_peak_reverse_voltage(self, peak_reverse_voltage : float):
+    #     """
+    #     Sets the peak reverse voltage.
+    #     """
+    #     self.configuration.peak_reverse_voltage = peak_reverse_voltage
 
-    def set_torque_neutral_deadband(self, torque_neutral_deadband : float):
-        """
-        Sets the torque neutral deadband.
-        """
-        self.configuration.torque_neutral_deadband = torque_neutral_deadband
+    # def set_torque_neutral_deadband(self, torque_neutral_deadband : float):
+    #     """
+    #     Sets the torque neutral deadband.
+    #     """
+    #     self.configuration.torque_neutral_deadband = torque_neutral_deadband
 
-    def set_peak_forward_torque_current(self, peak_forward_torque_current : float):
-        """
-        Sets the peak forward torque current.
-        """
-        self.configuration.peak_forward_torque_current = peak_forward_torque_current
+    # def set_peak_forward_torque_current(self, peak_forward_torque_current : float):
+    #     """
+    #     Sets the peak forward torque current.
+    #     """
+    #     self.configuration.peak_forward_torque_current = peak_forward_torque_current
 
-    def set_peak_reverse_torque_current(self, peak_reverse_torque_current : float):
-        """
-        Sets the peak reverse torque current.
-        """
-        self.configuration.peak_reverse_torque_current = peak_reverse_torque_current
+    # def set_peak_reverse_torque_current(self, peak_reverse_torque_current : float):
+    #     """
+    #     Sets the peak reverse torque current.
+    #     """
+    #     self.configuration.peak_reverse_torque_current = peak_reverse_torque_current
 
     def set_duty_cycle_closed_loop_ramp_period(self, duty_cycle_closed_loop_ramp_period : float):
         """
@@ -550,15 +544,17 @@ class Motor:
         """
         self.configuration = MotorConfiguration()
 
-    def set(self, mode : ControlMode, setpoint : float, feed_forward : float = 0, feed_forward_type : FeedForwardType = FeedForwardType.NONE):
+    def set(self, mode : ControlMode, setpoint : float, feed_forward_type : FeedForwardType, feed_forward : float = 0, gain_slot : int = 0):
         """
         Set the motor control.
         """
         output_control = OutputControl()
+        output_control.motor_id = self.id
         output_control.control_mode = mode
         output_control.setpoint = setpoint
         output_control.feed_forward = feed_forward
         output_control.feed_forward_type = feed_forward_type
+        output_control.gain_slot = gain_slot
         with self.__class__.mutex:
             self.__class__.manager.update_motor_control(self.id, output_control)
 
@@ -654,60 +650,6 @@ class Motor:
             return status.commanded_output
         return 0.0
 
-    def get_active_trajectory_arbff(self) -> float:
-        """
-        Gets the active trajectory's arbitrary feed forward.
-        """
-        status = self.__get_status()
-        if status is not None:
-            return status.active_trajectory_arbff
-        return 0.0
-
-    def get_active_trajectory_position(self) -> float:
-        """
-        Gets the position of the active trajectory.
-        """
-        status = self.__get_status()
-        if status is not None:
-            return status.active_trajectory_position
-        return 0.0
-
-    def get_active_trajectory_velocity(self) -> float:
-        """
-        Gets the active trajectory velocity.
-        """
-        status = self.__get_status()
-        if status is not None:
-            return status.active_trajectory_velocity
-        return 0.0
-
-    def get_raw_closed_loop_error(self) -> float:
-        """
-        Gets the raw closed loop error.
-        """
-        status = self.__get_status()
-        if status is not None:
-            return status.raw_closed_loop_error
-        return 0.0
-
-    def get_raw_integral_accum(self) -> float:
-        """
-        Gets the raw integral accumulation.
-        """
-        status = self.__get_status()
-        if status is not None:
-            return status.raw_integral_accum
-        return 0.0
-
-    def get_raw_error_derivative(self) -> float:
-        """
-        Gets the raw error derivative.
-        """
-        status = self.__get_status()
-        if status is not None:
-            return status.raw_error_derivative
-        return 0.0
-
     def get_raw_output_percent(self) -> float:
         """
         Gets the raw output percentage.
@@ -721,7 +663,7 @@ class Motor:
         """
         Gets the current setpoint.
         """
-        return self.__get_control().output
+        return self.__get_control().setpoint
 
     def is_at_setpoint(self, setpoint_delta_threshold : float) -> bool:
         """
@@ -732,8 +674,8 @@ class Motor:
         if control is None or status is None:
             return False
 
-        control_mode = control.controlMode
-        setpoint = control.output
+        control_mode = control.control_mode
+        setpoint = control.setpoint
 
         if control_mode == ControlMode.MOTION_MAGIC or control_mode == ControlMode.POSITION:
             return within(setpoint, status.sensor_position, setpoint_delta_threshold)
@@ -763,12 +705,6 @@ class Motor:
             "_supplyCurrentLimit",
             "_supplyCurrentTreshhold",
             "_supplyTimeThreshold",
-            # "_supplyVoltageTimeConstant",
-            # "_peakForwardVoltage",
-            # "_peakReverseVoltage",
-            # "_torqueNeautralDeadband",
-            # "_peakForwardTorqueCurrent",
-            # "_peakReverseTorqueCurrent",
             "_dutyCycleClosedLoopRampPeriod",
             "_torqueCurrentClosedLoopRampPeriod",
             "_voltageClosedLoopRampPeriod",
@@ -782,49 +718,6 @@ class Motor:
             "_motionMagicAcceleration",
             "_motionMagicCruiseVelocity",
             "_motionMagicJerk"
-            # "_kF",
-            # "_kP_1",
-            # "_kI_1",
-            # "_kD_1",
-            # "_kF_1",
-            # "_activeGainSlot",
-            # "_iZone",
-            # "_maxIAccum",
-            # "_allowedClosedLoopError",
-            # "_maxClosedLoopPeakOutput",
-            # "_motionCruiseVelocity",
-            # "_motionCruiseAcceleration",
-            # "_motionSCurveStrength",
-            # "_forwardSoftLimit",
-            # "_forwardSoftLimitEnable",
-            # "_reverseSoftLimit",
-            # "_reverseSoftLimitEnable",
-            # "_feedbackSensorCoefficient",
-            # "_voltageCompensationSaturation",
-            # "_voltageCompensationEnabled",
-            # "_inverted",
-            # "_sensorPhaseInverted",
-            # "_neutralModeBrake",
-            # "_openLoopRamp",
-            # "_closedLoopRamp",
-            # "_supplyCurrentLimitEnable",
-            # "_supplyCurrentLimit",
-            # "_supplyCurrentLimitThresholdCurrent",
-            # "_supplyCurrentLimitThresholdTime",
-            # "_statorCurrentLimitEnable",
-            # "_statorCurrentLimit",
-            # "_statorCurrentLimitThresholdCurrent",
-            # "_statorCurrentLimitThresholdTime",
-            # "_followingEnabled",
-            # "_followerId",
-            # "_forwardLimitSwitchEnabled",
-            # "_reverseLimitSwitchEnabled",
-            # "_forwardLimitSwitchSourceType",
-            # "_reverseLimitSwitchSourceType",
-            # "_forwardLimitSwitchNormallyClosed",
-            # "_reverseLimitSwitchNormallyClosed",
-            # "_peakOutputForward",
-            # "_peakOutputReverse",
         }
 
         for config_string in config_strings:
@@ -864,47 +757,3 @@ class Motor:
         self.configuration.motion_magic_acceleration = node.get_parameter(node.get_name() + '/' + motor_string + '_motionMagicAcceleration').value()
         self.configuration.motion_magic_cruise_velocity = node.get_parameter(node.get_name() + '/' + motor_string + '_motionMagicCruiseVelocity').value()
         self.configuration.motion_magic_jerk = node.get_parameter(node.get_name() + '/' + motor_string + '_motionMagicJerk').value()
-        # self.configuration.kP_1 = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_kP_1").value()
-        # self.configuration.kI_1 = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_kI_1").value()
-        # self.configuration.kD_1 = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_kD_1").value()
-        # self.configuration.kF_1 = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_kF_1").value()
-        # self.configuration.active_gain_slot = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_activeGainSlot").value()
-        # self.configuration.iZone = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_iZone").value()
-        # self.configuration.maxIAccum = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_maxIAccum").value()
-        # self.configuration.allowedClosedLoopError = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_allowedClosedLoopError").value()
-        # self.configuration.maxClosedLoopPeakOutput = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_maxClosedLoopPeakOutput").value()
-        # self.configuration.motionCruiseVelocity = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_motionCruiseVelocity").value()
-        # self.configuration.motionCruiseAcceleration = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_motionCruiseAcceleration").value()
-        # self.configuration.motionSCurveStrength = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_motionSCurveStrength").value()
-        # self.configuration.forwardSoftLimit = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_forwardSoftLimit").value()
-        # self.configuration.forwardSoftLimitEnable = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_forwardSoftLimitEnable").value()
-        # self.configuration.reverseSoftLimit = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_reverseSoftLimit").value()
-        # self.configuration.reverseSoftLimitEnable = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_reverseSoftLimitEnable").value()
-        # self.configuration.feedbackSensorCoefficient = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_feedbackSensorCoefficient").value()
-        # self.configuration.voltageCompensationSaturation = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_voltageCompensationSaturation").value()
-        # self.configuration.voltageCompensationEnabled = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_voltageCompensationEnabled").value()
-        # self.configuration.inverted = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_inverted").value()
-        # self.configuration.sensorPhaseInverted = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_sensorPhaseInverted").value()
-        # self.configuration.neutralMode = NeutralMode.Coast
-        # if NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_neutralModeBrake").value() is True:
-        #     self.configuration.neutralMode = NeutralMode.Brake
-        # self.configuration.openLoopRamp = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_openLoopRamp").value()
-        # self.configuration.closedLoopRamp = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_closedLoopRamp").value()
-        # self.configuration.supplyCurrentLimitEnable = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_supplyCurrentLimitEnable").value()
-        # self.configuration.supplyCurrentLimit = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_supplyCurrentLimit").value()
-        # self.configuration.supplyCurrentLimitThresholdCurrent = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_supplyCurrentLimitThresholdCurrent").value()
-        # self.configuration.supplyCurrentLimitThresholdTime = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_supplyCurrentLimitThresholdTime").value()
-        # self.configuration.statorCurrentLimitEnable = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_statorCurrentLimitEnable").value()
-        # self.configuration.statorCurrentLimit = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_statorCurrentLimit").value()
-        # self.configuration.statorCurrentLimitThresholdCurrent = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_statorCurrentLimitThresholdCurrent").value()
-        # self.configuration.statorCurrentLimitThresholdTime = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_statorCurrentLimitThresholdTime").value()
-        # self.configuration.followingEnabled = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_followingEnabled").value()
-        # self.configuration.followerId = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_followerId").value()
-        # if NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_forwardLimitSwitchEnabled").value() is True:
-        #     self.configuration.forwardLimitSwitchSource = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_forwardLimitSwitchSourceType").value()
-        #     self.configuration.forwardLimitSwitchNormal = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_forwardLimitSwitchNormallyClosed").value()
-        # if NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_reverseLimitSwitchEnabled") is True:
-        #     self.configuration.reverseLimitSwitchSource = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_reverseLimitSwitchSourceType").value()
-        #     self.configuration.reverseLimitSwitchNormal = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_reverseLimitSwitchNormallyOpen").value()
-        # self.configuration.peakOutputForward = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_peakOutputForward").value()
-        # self.configuration.peakOutputReverse = NodeHandle.node_handle.get_parameter(node_name + "/" + motor_string + "_peakOutputReverse").value()
