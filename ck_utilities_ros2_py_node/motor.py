@@ -3,9 +3,11 @@
 import rclpy
 from dataclasses import dataclass
 from threading import Thread, RLock
-from ck_ros2_base_msgs_node.msg import Motor_Status
-from ck_ros2_base_msgs_node.msg import Motor_Control
-from ck_ros2_base_msgs_node.msg import Motor_Configuration
+from ck_ros2_base_msgs_node.msg import MotorStatus
+from ck_ros2_base_msgs_node.msg import MotorStatusArray
+from ck_ros2_base_msgs_node.msg import MotorControl
+from ck_ros2_base_msgs_node.msg import MotorControlArray
+from ck_ros2_base_msgs_node.msg import MotorConfiguration
 import ck_ros2_base_msgs_node.msg
 from enum import Enum
 from ck_utilities_ros2_py_node.ckmath import within
@@ -736,99 +738,3 @@ class Motor:
         # TODO: Verify the bus voltage or duty cycle out.
         else:
             return True
-
-    def __ros_motor_config_validation(self, motor_string):
-        config_strings = {
-            "id",
-            "master_id",
-            "invert",
-            "brake_neutral",
-            "_kP",
-            "_kI",
-            "_kD",
-            "_kV",
-            "_kS",
-            "_enable_stator_current_limit",
-            "stator_current_limit",
-            "enable_supply_current_limit",
-            "supply_current_limit",
-            "supply_current_threshold",
-            "supply_time_threshold",
-            "duty_cycle_closed_loop_ramp_period",
-            "torque_current_closed_loop_ramp_period",
-            "voltage_closed_loop_ramp_period",
-            "duty_cycle_open_loop_ramp_period",
-            "torque_current_open_loop_ramp_period",
-            "voltage_open_loop_ramp_period",
-            "enable_forward_soft_limit",
-            "forward_soft_limit_threshold",
-            "enable_reverse_soft_limit",
-            "reverse_soft_limit_threshold",
-            "motion_magic_acceleration",
-            "motion_magic_cruise_velocity",
-            "motion_magic_jerk"
-        }
-
-        for config_string in config_strings:
-            if not rclpy.has_param(f"/{rclpy.get_name()}/{motor_string}{config_string}"):
-                raise Exception(f"Motor: {motor_string} is missing config definition for: {config_string}")
-
-
-    def __load_motor_config(self, motor_string):
-        self.__ros_motor_config_validation(motor_string)
-
-        self.config.fast_master = rospy.get_param(rospy.get_name() + "/" + motor_string + "_fast_master")
-        self.config.kP = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kP")
-        self.config.kI = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kI")
-        self.config.kD = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kD")
-        self.config.kF = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kF")
-        self.config.kP_1 = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kP_1")
-        self.config.kI_1 = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kI_1")
-        self.config.kD_1 = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kD_1")
-        self.config.kF_1 = rospy.get_param(rospy.get_name() + "/" + motor_string + "_kF_1")
-        self.config.active_gain_slot = rospy.get_param(rospy.get_name() + "/" + motor_string + "_activeGainSlot")
-        self.config.iZone = rospy.get_param(rospy.get_name() + "/" + motor_string + "_iZone")
-        self.config.maxIAccum = rospy.get_param(rospy.get_name() + "/" + motor_string + "_maxIAccum")
-        self.config.allowedClosedLoopError = rospy.get_param(rospy.get_name() + "/" + motor_string + "_allowedClosedLoopError")
-        self.config.maxClosedLoopPeakOutput = rospy.get_param(rospy.get_name() + "/" + motor_string + "_maxClosedLoopPeakOutput")
-        self.config.motionCruiseVelocity = rospy.get_param(rospy.get_name() + "/" + motor_string + "_motionCruiseVelocity")
-        self.config.motionCruiseAcceleration = rospy.get_param(rospy.get_name() + "/" + motor_string + "_motionCruiseAcceleration")
-        self.config.motionSCurveStrength = rospy.get_param(rospy.get_name() + "/" + motor_string + "_motionSCurveStrength")
-        self.config.forwardSoftLimit = rospy.get_param(rospy.get_name() + "/" + motor_string + "_forwardSoftLimit")
-        self.config.forwardSoftLimitEnable = rospy.get_param(rospy.get_name() + "/" + motor_string + "_forwardSoftLimitEnable")
-        self.config.reverseSoftLimit = rospy.get_param(rospy.get_name() + "/" + motor_string + "_reverseSoftLimit")
-        self.config.reverseSoftLimitEnable = rospy.get_param(rospy.get_name() + "/" + motor_string + "_reverseSoftLimitEnable")
-        self.config.feedbackSensorCoefficient = rospy.get_param(rospy.get_name() + "/" + motor_string + "_feedbackSensorCoefficient")
-        self.config.voltageCompensationSaturation = rospy.get_param(rospy.get_name() + "/" + motor_string + "_voltageCompensationSaturation")
-        self.config.voltageCompensationEnabled = rospy.get_param(rospy.get_name() + "/" + motor_string + "_voltageCompensationEnabled")
-        self.config.inverted = rospy.get_param(rospy.get_name() + "/" + motor_string + "_inverted")
-        self.config.sensorPhaseInverted = rospy.get_param(rospy.get_name() + "/" + motor_string + "_sensorPhaseInverted")
-        self.config.neutralMode = NeutralMode.Coast
-        if rospy.get_param(rospy.get_name() + "/" + motor_string + "_neutralModeBrake") is True:
-            self.config.neutralMode = NeutralMode.Brake
-        self.config.openLoopRamp = rospy.get_param(rospy.get_name() + "/" + motor_string + "_openLoopRamp")
-        self.config.closedLoopRamp = rospy.get_param(rospy.get_name() + "/" + motor_string + "_closedLoopRamp")
-        self.config.supplyCurrentLimitEnable = rospy.get_param(rospy.get_name() + "/" + motor_string + "_supplyCurrentLimitEnable")
-        self.config.supplyCurrentLimit = rospy.get_param(rospy.get_name() + "/" + motor_string + "_supplyCurrentLimit")
-        self.config.supplyCurrentLimitThresholdCurrent = rospy.get_param(rospy.get_name() + "/" + motor_string + "_supplyCurrentLimitThresholdCurrent")
-        self.config.supplyCurrentLimitThresholdTime = rospy.get_param(rospy.get_name() + "/" + motor_string + "_supplyCurrentLimitThresholdTime")
-        self.config.statorCurrentLimitEnable = rospy.get_param(rospy.get_name() + "/" + motor_string + "_statorCurrentLimitEnable")
-        self.config.statorCurrentLimit = rospy.get_param(rospy.get_name() + "/" + motor_string + "_statorCurrentLimit")
-        self.config.statorCurrentLimitThresholdCurrent = rospy.get_param(rospy.get_name() + "/" + motor_string + "_statorCurrentLimitThresholdCurrent")
-        self.config.statorCurrentLimitThresholdTime = rospy.get_param(rospy.get_name() + "/" + motor_string + "_statorCurrentLimitThresholdTime")
-        self.config.followingEnabled = rospy.get_param(rospy.get_name() + "/" + motor_string + "_followingEnabled")
-        self.config.followerId = rospy.get_param(rospy.get_name() + "/" + motor_string + "_followerId")
-        if rospy.get_param(rospy.get_name() + "/" + motor_string + "_forwardLimitSwitchEnabled") is True:
-            self.config.forwardLimitSwitchSource = rospy.get_param(rospy.get_name() + "/" + motor_string + "_forwardLimitSwitchSourceType")
-            self.config.forwardLimitSwitchNormal = rospy.get_param(rospy.get_name() + "/" + motor_string + "_forwardLimitSwitchNormallyClosed")
-        else:
-            self.config.forwardLimitSwitchSource = LimitSwitchSource.Deactivated
-            self.config.forwardLimitSwitchNormal = LimitSwitchNormal.Disabled
-        if rospy.get_param(rospy.get_name() + "/" + motor_string + "_reverseLimitSwitchEnabled") is True:
-            self.config.reverseLimitSwitchSource = rospy.get_param(rospy.get_name() + "/" + motor_string + "_reverseLimitSwitchSourceType")
-            self.config.reverseLimitSwitchNormal = rospy.get_param(rospy.get_name() + "/" + motor_string + "_reverseLimitSwitchNormallyOpen")
-        else:
-            self.config.reverseLimitSwitchSource = LimitSwitchSource.Deactivated
-            self.config.reverseLimitSwitchNormal = LimitSwitchNormal.Disabled
-        self.config.peakOutputForward = rospy.get_param(rospy.get_name() + "/" + motor_string + "_peakOutputForward")
-        self.config.peakOutputReverse = rospy.get_param(rospy.get_name() + "/" + motor_string + "_peakOutputReverse")
